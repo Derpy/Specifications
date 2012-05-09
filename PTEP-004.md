@@ -4,6 +4,14 @@ The core schema defines the essence of how data will be represented
 and grow, it defines what kind of things are core objects, the kinds
 of actions which will be performed on them and methods of retrieval.
 
+The goal of this document is to describe standard data formats, access
+methods and query operations which can be implemented in a backend-neutral
+way and *NOT* to implement another DBMS.
+
+This should also be considered pre-draft quality as partial implementations
+of core services will need to be implemented first.
+
+
 ## Semantics
 
 We must first explain the sorts of complexity involved which need
@@ -41,7 +49,7 @@ Additional Example:
 
 ```
   Product - Red Tails
-  Versions - BRRip 2012
+  Version - BRRip 2012
   Variation - x264 - 800MB - YIFY
 ```
 
@@ -58,6 +66,21 @@ is suitable for a specific type of Shop, e.g. a Music Shop, it makes
 it extremely hard if they want to start selling Food but are required
 by their inventory system to attribute an Album or Artist to everything.
 
+### Links
+
+Objects can be linked to one another by specifying a uniquely identifying
+query, e.g. the Type and Unique ID of the target object, and can be tagged
+with names for easy manipulation.
+
+Links are intended to be as flexible as possible and turn the otherwise
+fairly normal key-value store into a graph structure.
+
+Suitable use cases include:
+
+ * Attaching a torrent to a Forum-Post.
+ * Relationships between Products, Versions and Variations.
+ * Last Favorited torrent of a user.
+ 
 
 ### Metadata
 
@@ -92,7 +115,6 @@ records and handing out the appropriate .torrent files.
 All objects have the following fields:
 ```
        _id: str, Globally unique ID
-      name: str, human readable name
      links: dic, objects which this one is linked to
   metadata: dic, descriptive keys/values (e.g. synopsis)
 ```
@@ -103,48 +125,162 @@ storage method is used as long as the standard database operations are supported
 ### Example Objects:
 
 ```javascript
-{ '_id':  'a1',
-  'type': 'product',
-  'name': 'GrillMaster',
+[{ '_id':  'a1',
+  'type': 'product',  
   'metadata': {
+    'name': 'GrillMaster',
     'manufacturer': 'Derp Industries',
     'country': 'America',
   }
-}
+},
 
 { '_id':  'b2',
-  'type': 'version',
-  'name': '9000',
+  'type': 'version',  
   'links': {
-    'product': 'a1',
-  }  
+    0:{'type':'product', '_id':'a1'},
+  },
   'metadata': {
+    'name': '9000',
     'manufacturer': 'Darp Inc.',
     'country': 'China',
   }
-}
+},
 
 { '_id':  'c3',
-  'type': 'variation',
-  'name': 'Black, Extra Large',
+  'type': 'variation',  
   'links': {
-    'product-version': ['a1','b2'],
-    'product': 'a1',
-    'torrent': 'D0FAA0E413695B39B12D4A4A28E1917CE9450C7B',
+    0:{'type':'version', '_id':'b2'},
+    1:{'type':'product', '_id':'a1'},
+    2:{'type':'torrent': '_id':'D0FAA0E413695B39B12D4A4A28E1917CE9450C7B'},
   },
   'metadata': {
+    'name': 'Black, Extra Large',
     'comments': 'The only Extra Large model in existance',
   }
-}
+}]
 ```
 
-## Database Operations
+
+## Query Operations
 
 Because the schema is flexible and 'standardised' regardless of the type of object the
 data can be structured in a way which a small number of database operations can perform
 any query necessary for an end-user.
 
- * Get by ID
- * Find by Name
+ * Get Object
+ * Delete Object
+ * Put Object
  * Find by Link
  * Find by Metadata Search
+ * Set Link
+ * Set Metadata
+
+All example requests are for demonstration purposes only and represented using HTTP
+roughly following REST principals. Implementations using other transports will
+implement the same database operations but may be slightly different so that programming
+feels natural, e.g. using JSON over ØMQ.
+
+### Get Object
+
+Retrieve a single object given the `_id` field.
+
+_Example Request_
+```
+GET /db/D0FAA0E413695B39B12D4A4A28E1917CE9450C7B HTTP/1.0
+Content-Type: application/json
+```
+
+
+### Delete Object
+
+Remove an object given the `_id` 
+
+_Example Request_
+```
+DELETE /db/D0FAA0E413695B39B12D4A4A28E1917CE9450C7B HTTP/1.0
+```
+
+
+### Put Object
+
+Store a single object in the database.
+
+_Example Request_
+```
+PUT /db HTTP/1.0
+Content-Type: application/json
+
+
+{ '_id':  'D0FAA0E413695B39B12D4A4A28E1917CE9450C7B',
+  'type': 'torrent',  
+  'metadata': {
+    'name': 'Derp',
+    'size': 1002438656,
+    'pieces': 957
+  }
+}
+```
+
+Once an object has been `PUT` into the database the `type` field
+cannot be changed without deleting and re-inserting into the database.
+
+
+### Find by Link
+
+Find all object IDs which have the given link.
+TODO: implementation confusion!!!
+
+
+### Find by Metadata Search
+
+Perform a full text search for all objects which match the criteria.
+TODO: implementation confusion!!!
+
+
+### Set Link
+
+Link a single object to another, remove the link if the target is NULL.
+
+_Example Request_
+```
+POST /db/D0FAA0E413695B39B12D4A4A28E1917CE9450C7B/links
+Content-Type: application/json
+
+
+{'owner':{'type':'user','_id':'a2937c8086cefe9555d2c8aee0cce2f9bd6ad9d4'}}
+```
+This will create a link on the object to a user, the link will be called `owner`.
+Multiple links can be specified at the same time.
+
+
+### Set Metadata
+
+Set metadata keys, remove if the value is NULL.
+
+_Example Request_
+```
+POST /db/D0FAA0E413695B39B12D4A4A28E1917CE9450C7B/metadata
+Content-Type: application/json
+
+
+{'imdb':'http://www.imdb.com/title/tt1910272/',
+ 'wikipedia':'http://en.wikipedia.org/wiki/John_Titor'}
+```
+Will set the `imdb` and `wikipedia` keys of the objects metadata.
+
+
+## Implementations
+
+Please note that the core schema may change slightly after feedback from the initial
+implementations. We aim to provide reference implementations which support all query
+operations on all major types of database systems:
+
+ * SQLite
+ * Riak
+ * MongoDB
+
+It is noted that any query operations involving full text-metadata search may involve
+significant engineering to get it working as fast as expected.
+
+Ideas on how to search this type of schema using Solr has explained by Frederick Giasson at:
+http://fgiasson.com/blog/index.php/2009/04/29/rdf-aggregates-and-full-text-search-on-steroids-with-solr/
