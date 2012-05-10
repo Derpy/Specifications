@@ -170,7 +170,7 @@ any query necessary for an end-user.
  * Get Object
  * Delete Object
  * Put Object
- * Find by Link
+ * Find by Link Search
  * Find by Metadata Search
  * Set Link
  * Set Metadata
@@ -193,7 +193,7 @@ Content-Type: application/json
 
 ### Delete Object
 
-Remove an object given the `_id` 
+Remove an object given the `_id`, all metadata and links to and from the object will be removed too.
 
 _Example Request_
 ```
@@ -225,16 +225,64 @@ Once an object has been `PUT` into the database the `type` field
 cannot be changed without deleting and re-inserting into the database.
 
 
-### Find by Link
+### Find by Link Search
 
-Find all object IDs which have the given link.
-TODO: implementation confusion!!!
+Find all object IDs which have links of the given criteria.
+
+_Example Request_
+```
+GET /db/links?type=product&id=a1
+```
+_Example Response_
+```
+HTTP/1.0 200 OK
+Content-Type: application/json
+
+{'query':'type=product&id=a1',
+ 'total':2,
+ 'offset':0,
+ 'results':['F9348F0C...', 'C3992AE...']}
+```
+
+_Returns the Following Keys_
+
+ * `query`   - str, RFC1738 encoded query
+ * `total`   - int, Total results found
+ * `offset`  - int, Current offset
+ * `results` - lst, List of object IDs found
 
 
 ### Find by Metadata Search
 
 Perform a full text search for all objects which match the criteria.
-TODO: implementation confusion!!!
+
+_Example Request_
+```
+GET /db/search?q=Titor&tags=unix,time.travel HTTP/1.0
+```
+_Example Response_
+```
+HTTP/1.0 200 OK
+Content-Type: application/json
+
+{'query':'q=Titor&tags=unix,time.travel',
+ 'total':3,
+ 'offset':0,
+ 'results':['AC293DE...', 'F9348F0C...', 'C3992AE...']}
+```
+
+_Returns the Following Keys_
+
+ * `query`   - str, RFC1738 encoded query
+ * `total`   - int, Total results found
+ * `offset`  - int, Current offset
+ * `results` - lst, List of object IDs found
+
+*Notes:*
+The idea is we feed all objects into ElastiSearch, Sphinx or RiakSearch
+and try to establish which kinds of attributes can be searched for.
+This is getting too complex :(
+
 
 
 ### Set Link
@@ -243,7 +291,7 @@ Link a single object to another, remove the link if the target is NULL.
 
 _Example Request_
 ```
-POST /db/D0FAA0E413695B39B12D4A4A28E1917CE9450C7B/links
+POST /db/D0FAA0E413695B39B12D4A4A28E1917CE9450C7B/links HTTP/1.0
 Content-Type: application/json
 
 
@@ -259,7 +307,7 @@ Set metadata keys, remove if the value is NULL.
 
 _Example Request_
 ```
-POST /db/D0FAA0E413695B39B12D4A4A28E1917CE9450C7B/metadata
+POST /db/D0FAA0E413695B39B12D4A4A28E1917CE9450C7B/metadata HTTP/1.0
 Content-Type: application/json
 
 
